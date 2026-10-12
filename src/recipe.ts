@@ -1168,6 +1168,9 @@ export function deprecatedConversationsNotices(conversations: RecipeConversation
 
 export interface Recipe {
   name: string;
+  /** Persistent storage root for explicit launches. Relative to the recipe
+   * file, not cwd; URL recipes require an absolute local path. DATA_DIR wins. */
+  dataDir?: string;
   description?: string;
   version?: string;
   agent: RecipeAgent;
@@ -1302,7 +1305,7 @@ export function substituteEnvVars(value: unknown, source: string): unknown {
 // ---------------------------------------------------------------------------
 
 /**
- * Base for resolving recipe-relative paths (currently: `children[].recipe`).
+ * Base for resolving recipe-relative paths (dataDir, children, extensions).
  * `file` sources use the recipe file's directory; `url` sources use the URL
  * base so a child like `"child.json"` on an `https://example.com/parent.json`
  * load resolves to `https://example.com/child.json`.
@@ -1318,10 +1321,10 @@ type RecipeSourceBase = { kind: 'file'; dir: string } | { kind: 'url'; base: str
  * from the environment), so it must never be written to disk.
  *
  * `persistable` is the raw pre-substitution recipe JSON with only the
- * source-relative paths (`modules.fleet.children[].recipe`,
+ * source-relative paths (`dataDir`, `modules.fleet.children[].recipe`,
  * `extensions[*].path`) resolved to their final absolute form — those need
- * the original source base, which a resumed session no longer has. Every
- * `${VAR}` reference and any URL systemPrompt stay unresolved, so the file
+ * the original source base, which a resumed session no longer has. Other
+ * `${VAR}` references and any URL systemPrompt stay unresolved, so the file
  * `saveRecipe` writes carries no secret material and re-resolves against the
  * *current* environment on resume.
  */
@@ -1369,6 +1372,12 @@ export async function loadRecipeDetailed(source: string): Promise<LoadedRecipe> 
 
   raw = substituteEnvVars(raw, source);
   const recipe = validateRecipe(raw);
+  if (recipe.dataDir !== undefined && !isAbsolute(recipe.dataDir)) {
+    if (sourceBase.kind === 'url') {
+      throw new Error('Recipe dataDir is relative, but the recipe was loaded from a URL. Use an absolute local filesystem path.');
+    }
+    recipe.dataDir = resolve(sourceBase.dir, recipe.dataDir);
+  }
   resolveChildRecipePaths(recipe, sourceBase);
   resolveExtensionPaths(recipe, sourceBase);
   const resolved = await resolveSystemPrompt(recipe);
@@ -1377,17 +1386,18 @@ export async function loadRecipeDetailed(source: string): Promise<LoadedRecipe> 
 }
 
 /**
- * Copy the resolved `modules.fleet.children[].recipe` and
+ * Copy the resolved `dataDir`, `modules.fleet.children[].recipe` and
  * `extensions[*].path` values from the resolved recipe into the raw
  * pre-substitution snapshot. Those fields are resolved against the recipe's
  * original source base (its directory or URL), which is gone by resume time
  * — so the persisted form must carry them already-absolute. Substitution
  * never changes object shape (it is a per-string replacement), so the two
  * trees align index-for-index and key-for-key. Paths are not treated as
- * secret: an env value that was interpolated into a child-recipe or
+ * secret: an env value that was interpolated into a dataDir, child-recipe or
  * extension path IS persisted in resolved form.
  */
 function copyResolvedPathsIntoRaw(raw: Record<string, unknown>, recipe: Recipe): void {
+  if (recipe.dataDir !== undefined) raw.dataDir = recipe.dataDir;
   const fleet = recipe.modules?.fleet;
   const resolvedChildren = (typeof fleet === 'object' && fleet !== null) ? fleet.children : undefined;
   if (Array.isArray(resolvedChildren)) {
@@ -1570,7 +1580,7 @@ function validateKvUnifiedConfig(strategy: Record<string, unknown>): void {
  * interface) fails to compile.
  */
 const RECIPE_KEYS = [
-  'name', 'description', 'version', 'agent', 'mcpServers', 'modules', 'extensions',
+  'name', 'dataDir', 'description', 'version', 'agent', 'mcpServers', 'modules', 'extensions',
   'sessionNaming', 'codeExecution', 'conversations', 'subconscious', 'toolClassOverrides',
 ] as const;
 const RECIPE_AGENT_KEYS = [
@@ -1685,6 +1695,9 @@ export function validateRecipe(raw: unknown): Recipe {
 
   if (typeof obj.name !== 'string' || !obj.name) {
     throw new Error('Recipe must have a "name" string');
+  }
+  if (obj.dataDir !== undefined && (typeof obj.dataDir !== 'string' || !obj.dataDir.trim())) {
+    throw new Error('Recipe dataDir must be a nonempty string');
   }
   if (!obj.agent || typeof obj.agent !== 'object') {
     throw new Error('Recipe must have an "agent" object');

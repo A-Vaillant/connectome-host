@@ -74,14 +74,10 @@ import { resolveAgentName } from './agent-name.js';
 import { generateSessionName } from './synesthete.js';
 import {
   type Recipe,
-  DEFAULT_RECIPE,
-  loadRecipeDetailed,
-  saveRecipe,
-  loadSavedRecipe,
-  clearSavedRecipe,
   parseRecipeArg,
   deprecatedConversationsNotices,
 } from './recipe.js';
+import { prepareRecipeStartup } from './recipe-startup.js';
 import { createBranchState, resetBranchState, handleExport, type BranchState } from './commands.js';
 import { buildFrameworkAgentConfig, membraneCachingOverride } from './framework-agent-config.js';
 import { buildFrameworkStrategy, buildConversationsConfig } from './framework-strategy.js';
@@ -159,44 +155,23 @@ interface AppContext {
 async function resolveRecipe(): Promise<Recipe> {
   const { source, noRecipe } = parseRecipeArg(process.argv);
 
-  if (noRecipe) {
-    clearSavedRecipe(config.dataDir);
-    console.log('Starting with default recipe.');
-    return DEFAULT_RECIPE;
-  }
-
-  if (source) {
-    try {
-      // Save the unresolved (pre-substitution) form: $DATA_DIR is typically
-      // host-mounted and backed up, so resolved secrets must never land there.
-      const { recipe, persistable } = await loadRecipeDetailed(source);
-      saveRecipe(config.dataDir, persistable);
-      console.log(`Loaded recipe: ${recipe.name}${recipe.description ? ` — ${recipe.description}` : ''}`);
-      return recipe;
-    } catch (err) {
-      console.error(`Failed to load recipe from ${source}:`, err instanceof Error ? err.message : err);
-      process.exit(1);
-    }
-  }
-
-  // Try saved recipe. Re-resolves ${VAR} references against the CURRENT
-  // environment, so a missing secret fails loudly here rather than starting
-  // a misconfigured agent on the default recipe.
   try {
-    const saved = await loadSavedRecipe(config.dataDir);
-    if (saved) {
-      console.log(`Resuming recipe: ${saved.name}`);
-      return saved;
-    }
+    const { recipe, dataDir, mode } = await prepareRecipeStartup({
+      source, noRecipe, envDataDir: process.env.DATA_DIR,
+    });
+    config.dataDir = dataDir;
+    if (noRecipe) console.log('Starting with default recipe.');
+    else if (mode === 'loaded') {
+      console.log(`Loaded recipe: ${recipe.name}${recipe.description ? ` — ${recipe.description}` : ''}`);
+    } else if (mode === 'resumed') console.log(`Resuming recipe: ${recipe.name}`);
+    return recipe;
   } catch (err) {
     console.error(
-      `Failed to resume saved recipe from ${config.dataDir}:`,
+      source && !noRecipe ? `Failed to load recipe from ${source}:` : `Failed to resume saved recipe from ${config.dataDir}:`,
       err instanceof Error ? err.message : err,
     );
     process.exit(1);
   }
-
-  return DEFAULT_RECIPE;
 }
 
 // ---------------------------------------------------------------------------

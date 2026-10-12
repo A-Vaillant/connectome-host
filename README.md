@@ -148,12 +148,29 @@ full semantics of each mode.
 | `bun src/index.ts <url>` | Fetch recipe from HTTP URL |
 | `bun src/index.ts --no-recipe` | Reset to default generic assistant |
 
-The loaded recipe is saved to `$DATA_DIR/.recipe.json` (mode 0600) in its
+An optional top-level `"dataDir": "./state"` selects persistent storage for
+an explicit recipe launch. Precedence is nonempty `DATA_DIR`, then recipe
+`dataDir`, then `./data` (an empty `DATA_DIR` does not override the recipe).
+Relative paths resolve against the original local recipe file's directory,
+not cwd; absolute paths pass through. The field must be a nonempty string.
+URL recipes may omit it or specify an absolute local filesystem path, but
+cannot use a relative path. Invalid or unwritable storage fails without
+falling back. Snapshots, runtime state, logs and sessions use the selected root.
+
+Bare starts and `--no-recipe` still look only in `DATA_DIR` or `./data`; a
+saved recipe cannot redirect that root. To resume recipe-owned storage,
+pass the recipe again (or its saved `.recipe.json`), or set `DATA_DIR`.
+This is not configuration isolation: cwd behavior for workspace mounts,
+MCPL registry/overlays, fleet children and extensions is unchanged, and
+existing file-specific environment overrides still apply.
+
+The loaded recipe is saved to the selected root's `.recipe.json` (mode 0600) in its
 **unresolved** form — `${VAR}` references kept, a URL system prompt kept as
 the URL — and re-resolved against the current environment on each bare start,
 so rotated credentials take effect on restart. The exceptions are fleet
-children's `recipe` and extensions' `path`, which are stored resolved: keep
-secrets out of them, since a `${TOKEN}` in a child-recipe URL lands in the
+children's `recipe`, extensions' `path`, and `dataDir`, which are stored
+resolved (so relative storage cannot rebase on reload): keep secrets out of
+these paths, since a `${TOKEN}` in a child-recipe URL lands in the
 snapshot as the token itself. Treat the data directory as sensitive anyway —
 it holds the agent's history, and a fleet parent currently persists its
 children's resolved `env` there (#162). A variable that has disappeared since
@@ -560,7 +577,7 @@ bun install      # or npm install; the postinstall step builds the web UI
 | `CODEX_BASE_URL` | ChatGPT Codex backend | Optional subscription transport override |
 | `CODEX_GATE_TOKEN` | — | `openai-codex` through an inference gate that holds the ChatGPT logins (gate's `/codex` leg): no Codex CLI or login on this host. Requires `CODEX_BASE_URL` pointing at the gate |
 | `MODEL` | from recipe, else `claude-opus-4-6` (`gpt-5.4` for `openai-codex`) | Override model (wins over the recipe) |
-| `DATA_DIR` | `./data` | Session, recipe and log storage |
+| `DATA_DIR` | Recipe `dataDir` on explicit launch, otherwise `./data` | Session, recipe and log storage; nonempty env value wins |
 | `AGENT_TIMEZONE` | process timezone | Agent-facing clock when the recipe sets no `agent.timezone` |
 | `SLEEP_PRIVILEGED_FILE` | `./sleep-privileged.json` | Who may wake the agent during `sleep` |
 | `OBSERVERS_FILE` | `$DATA_DIR/observers.json` | Web UI observer grants |
