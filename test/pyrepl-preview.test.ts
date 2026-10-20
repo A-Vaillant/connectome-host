@@ -1,7 +1,30 @@
 import { expect, test } from 'bun:test';
-import { previewPyreplCall } from '../src/pyrepl-preview.js';
+import { presentToolCallBatch, previewPyreplCall } from '../src/pyrepl-preview.js';
 
 const preview = (code: string) => previewPyreplCall('mcpl--pyrepl--exec', { session: 'audit', code })!;
+
+test('the actual yielded-call batch renders previews without an MCP lifecycle event', () => {
+  const event = {
+    type: 'inference:tool_calls_yielded', agentName: 'sigilist',
+    calls: [{ id: 'call-1', name: 'mcpl--pyrepl--exec', input: { session: 'audit', code: 'print(42)' } }],
+  };
+  expect(presentToolCallBatch(event.calls)).toEqual({ label: 'pyrepl exec · audit', rows: ['  call print(42)'] });
+  // The framework emits this *other* shape later. It cannot identify the
+  // owning UI agent or match a model-facing tool name; this was the bug.
+  const started = { type: 'tool:started', module: 'mcpl:pyrepl', tool: 'exec', input: event.calls[0].input };
+  expect(previewPyreplCall(started.tool, started.input)).toBeUndefined();
+});
+
+test('mixed tool batches keep generic tools and identify each Python preview', () => {
+  expect(presentToolCallBatch([
+    { name: 'subagent--peek', input: {} },
+    { name: 'mcpl--pyrepl--exec', input: { session: 'a', code: 'x = 1' } },
+    { name: 'mcpl--pyrepl--exec', input: { session: 'b', code: 'print(2)' } },
+  ])).toEqual({
+    label: 'subagent--peek, pyrepl exec · a, pyrepl exec · b',
+    rows: ['pyrepl exec · a', '  set x = 1', 'pyrepl exec · b', '  call print(2)'],
+  });
+});
 
 test('renders imports, assignments, and actual call syntax without invented intent', () => {
   expect(preview('from pathlib import Path\np = Path("notes.md")\nprint(p.read_text())')).toEqual({

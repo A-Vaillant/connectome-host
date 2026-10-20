@@ -7,6 +7,21 @@ export interface PyreplPreview {
   notice?: string;
 }
 
+/** Present the model-facing calls carried by inference:tool_calls_yielded.
+ * MCP lifecycle traces are a different shape: bare tool names, and no owner.
+ * Do not wait for those traces to render the user's tool-call message. */
+export function presentToolCallBatch(calls: ReadonlyArray<{ name: string; input?: unknown }>): { label: string; rows: string[] } {
+  const previews = calls.map(call => previewPyreplCall(call.name, call.input));
+  const rows: string[] = [];
+  for (const view of previews) {
+    if (!view) continue;
+    if (calls.length > 1) rows.push(view.title);
+    rows.push(...view.lines.map(line => `  ${line}`));
+    if (view.notice) rows.push(`  ${view.notice}`);
+  }
+  return { label: calls.map((call, i) => previews[i]?.title ?? call.name).join(', '), rows };
+}
+
 const MAX_BYTES = 64 * 1024;
 const MAX_ROWS = 8;
 const MAX_DEPTH = 4;

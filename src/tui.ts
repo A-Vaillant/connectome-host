@@ -41,7 +41,7 @@ import { parseFleetRoute } from './modules/fleet-types.js';
 import { handleCommand, resetBranchState } from './commands.js';
 import { formatQuotaReadout } from './quota-meter.js';
 import { takeRecipeWarnings } from './recipe.js';
-import { previewPyreplCall, type PyreplPreview } from './pyrepl-preview.js';
+import { presentToolCallBatch, previewPyreplCall, type PyreplPreview } from './pyrepl-preview.js';
 
 /** Format a token count compactly: 1.2M / 3.5k / 42. */
 export function fmtTokens(n: number): string {
@@ -1870,7 +1870,8 @@ export async function runTui(app: AppContext): Promise<void> {
 
       case 'inference:tool_calls_yielded': {
         const calls = event.calls as Array<{ name: string; input?: unknown }>;
-        const names = calls.map(c => c.name).join(', ');
+        const presentation = presentToolCallBatch(calls);
+        const names = presentation.label;
 
         if (agent) {
           const toolSnippet = calls.map(c => {
@@ -1894,10 +1895,14 @@ export async function runTui(app: AppContext): Promise<void> {
           state.status = backgrounded ? 'background' : 'tools';
           state.tool = names;
           if (streaming) endStream();
-          if (!backgrounded) addEvent(`[tools] ${names}`, YELLOW);
+          if (!backgrounded) {
+            addEvent(`[tools] ${names}`, YELLOW);
+            for (const row of presentation.rows) addLine(`  ${row}`, DIM_GRAY);
+          }
         } else {
           const short = shortAgentName(agent ?? '');
           addLine(`  [${short}] ${names}`, DIM_GRAY);
+          if (verboseChat) for (const row of presentation.rows) addLine(`    ${row}`, DIM_GRAY);
           const sa = state.subagents.find(s => s.name === agent || s.name === short);
           if (sa) {
             sa.toolCallsCount += calls.length;
@@ -1934,20 +1939,15 @@ export async function runTui(app: AppContext): Promise<void> {
       case 'tool:started': {
         const tool = event.tool as string;
         const toolInput = event.input as Record<string, unknown> | undefined;
-        const preview = previewPyreplCall(tool, toolInput);
         if (agent === rootAgentName) {
-          state.tool = preview?.title ?? tool;
+          state.tool = tool;
           state.toolStartedAt = Date.now();
           updateStatus();
         }
         // Show file operations in chat
         if (toolInput && (agent === rootAgentName || verboseChat)) {
           const short = agent === rootAgentName ? '' : `[${shortAgentName(agent ?? '')}] `;
-          if (preview) {
-            addLine(`  ${short}${preview.title}`, YELLOW);
-            for (const line of preview.lines) addLine(`    ${line}`, DIM_GRAY);
-            if (preview.notice) addLine(`    ${preview.notice}`, DIM_GRAY);
-          } else if (tool === 'files:write' && toolInput.filePath) {
+          if (tool === 'files:write' && toolInput.filePath) {
             const fp = String(toolInput.filePath);
             addLine(`  ${short}write ${fp}`, DIM_GRAY);
           } else if (tool === 'files:materialize' && toolInput.targetDir) {

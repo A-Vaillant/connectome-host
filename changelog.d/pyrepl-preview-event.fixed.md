@@ -1,0 +1,1 @@
+- Render live terminal pyrepl previews directly from `inference:tool_calls_yielded`, which carries full tool names, arguments, and agent ownership. MCP `tool:started` instead carries a bare tool name without agent ownership, so the previous TUI preview branch never ran. Mixed batches retain per-session context; other tool labels are unchanged.
