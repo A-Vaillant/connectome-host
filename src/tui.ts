@@ -41,6 +41,7 @@ import { parseFleetRoute } from './modules/fleet-types.js';
 import { handleCommand, resetBranchState } from './commands.js';
 import { formatQuotaReadout } from './quota-meter.js';
 import { takeRecipeWarnings } from './recipe.js';
+import { previewPyreplCall, type PyreplPreview } from './pyrepl-preview.js';
 
 /** Format a token count compactly: 1.2M / 3.5k / 42. */
 export function fmtTokens(n: number): string {
@@ -762,6 +763,7 @@ export async function runTui(app: AppContext): Promise<void> {
 
     for (const msg of messages) {
       const toolNames: string[] = [];
+      const previews: PyreplPreview[] = [];
 
       for (const block of msg.content) {
         if (block.type === 'text' && (block as { text: string }).text.trim()) {
@@ -779,13 +781,21 @@ export async function runTui(app: AppContext): Promise<void> {
             addLine(`${THINKING_PREFIX}${line.length > 120 ? line.slice(0, 117) + '…' : line}`, THINKING_DIM);
           }
         } else if (block.type === 'tool_use') {
-          toolNames.push((block as { name: string }).name);
+          const call = block as { name: string; input?: unknown };
+          const preview = previewPyreplCall(call.name, call.input);
+          toolNames.push(preview?.title ?? call.name);
+          if (preview) previews.push(preview);
         }
         // skip tool_result blocks
       }
 
       if (toolNames.length > 0) {
         addLine(`[tools] ${toolNames.join(', ')}`, YELLOW);
+        for (const preview of previews) {
+          if (previews.length > 1) addLine(`  ${preview.title}`, DIM_GRAY);
+          for (const line of preview.lines) addLine(`    ${line}`, DIM_GRAY);
+          if (preview.notice) addLine(`    ${preview.notice}`, DIM_GRAY);
+        }
       }
     }
 
@@ -1923,16 +1933,21 @@ export async function runTui(app: AppContext): Promise<void> {
 
       case 'tool:started': {
         const tool = event.tool as string;
+        const toolInput = event.input as Record<string, unknown> | undefined;
+        const preview = previewPyreplCall(tool, toolInput);
         if (agent === rootAgentName) {
-          state.tool = tool;
+          state.tool = preview?.title ?? tool;
           state.toolStartedAt = Date.now();
           updateStatus();
         }
         // Show file operations in chat
-        const toolInput = event.input as Record<string, unknown> | undefined;
         if (toolInput && (agent === rootAgentName || verboseChat)) {
           const short = agent === rootAgentName ? '' : `[${shortAgentName(agent ?? '')}] `;
-          if (tool === 'files:write' && toolInput.filePath) {
+          if (preview) {
+            addLine(`  ${short}${preview.title}`, YELLOW);
+            for (const line of preview.lines) addLine(`    ${line}`, DIM_GRAY);
+            if (preview.notice) addLine(`    ${preview.notice}`, DIM_GRAY);
+          } else if (tool === 'files:write' && toolInput.filePath) {
             const fp = String(toolInput.filePath);
             addLine(`  ${short}write ${fp}`, DIM_GRAY);
           } else if (tool === 'files:materialize' && toolInput.targetDir) {

@@ -715,6 +715,29 @@ Commands that move the head (`/undo`, `/redo`, `/checkout`, `/restore`,
 | `Delete` / `Backspace` | Stop the selected subagent or fleet child |
 | `r` | Restart the selected fleet child |
 
+### Python tool-call previews
+
+Calls to `mcpl--pyrepl--exec` show the session and a compact Python syntax-tree
+projection in the terminal (including history replay) and the Web UI:
+
+```text
+pyrepl exec · notes
+  from pathlib import Path
+  set p = Path("notes.md")
+  call print(p.read_text())
+```
+
+The shared renderer uses Lezer's Python parser locally; it does not execute the
+code, ask a model to describe it, resolve persistent Python variables, or claim
+that a call succeeded. Blocks retain their indentation and conditions. The Web
+UI keeps the original input/result expandable. Wait/interrupt/kill/session-list
+calls show their operation and session rather than an opaque namespaced label.
+
+Previews are limited to 64 KiB of source, eight rows, and four nested body levels.
+Shortened rows, omitted structure, truncated input, and parse errors are marked;
+unsupported syntax falls back to the original input instead of inventing a
+meaning. Displayed text escapes terminal controls. Other tools are unchanged.
+
 ## Architecture
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for how the host is built, and

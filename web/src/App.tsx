@@ -16,6 +16,7 @@ import { FilesPanel, FileViewerModal, type Mount, type FlatEntry, type FileViewe
 import { ContextPanel } from './Context';
 import { ContextDocument } from './ContextDocument';
 import { ObserverGateScreen } from './ObserverGate';
+import { previewPyreplCall } from '../../src/pyrepl-preview';
 import {
   OpsAlertStrip, HealthPanel, CREDENTIAL_ALERT_KINDS,
   type OpsAlert, type HealthSnapshot, type CredentialInfo, type CredentialAction,
@@ -968,7 +969,7 @@ export function App() {
     setBulkRemaining(want);
     requestOlder(Math.min(want, HISTORY_PAGE_CAP));
   };
-  const stopLoadOlder = (): void => setBulkRemaining(0);
+  const stopLoadOlder = (): void => { setBulkRemaining(0); };
 
   const applyHistoryPage = (msg: HistoryPageMessage): void => {
     if (msg.corrId !== pendingHistoryCorr) return;
@@ -2531,6 +2532,11 @@ function ToolBlockView(props: {
   blockKey: string;
   result?: ToolResultInfo;
 }) {
+  const preview = createMemo(() => {
+    let input: unknown;
+    try { input = JSON.parse(props.block.inputJson); } catch { /* Missing/partial input is labelled, never guessed. */ }
+    return previewPyreplCall(props.block.name, input, props.block.truncated);
+  });
   const kind = (): string => `tool:${props.block.name}`;
   const open = (): boolean => isBlockOpen(props.blockKey, kind());
   const allOpen = (): boolean => expandedKinds().has(kind());
@@ -2554,7 +2560,7 @@ function ToolBlockView(props: {
           onClick={() => toggleBlock(props.blockKey, kind())}
         >
           <span class={`w-1.5 h-1.5 rounded-full ${dot()}`} />
-          <span>{open() ? '▾' : '▸'} {props.block.name}{duration()}</span>
+          <span title={props.block.name}>{open() ? '▾' : '▸'} {preview()?.title ?? props.block.name}{duration()}</span>
           <Show when={props.result?.isError}>
             <span class="text-rose-400">error</span>
           </Show>
@@ -2566,6 +2572,12 @@ function ToolBlockView(props: {
           onClick={() => toggleKind(kind())}
         >{allOpen() ? `⤡ all ${props.block.name}` : `⤢ all ${props.block.name}`}</button>
       </div>
+      <Show when={preview()}>{(view) => (
+        <div class="mt-1 ml-3 font-mono text-xs text-neutral-400 whitespace-pre-wrap" aria-label="Python syntax preview">
+          <For each={view().lines}>{line => <div>{line}</div>}</For>
+          <Show when={view().notice}><div class="text-neutral-500 italic">{view().notice}</div></Show>
+        </div>
+      )}</Show>
       <Show when={open()}>
         <div class="mt-1 ml-3 space-y-1">
           <div class="text-[10px] uppercase tracking-wider text-neutral-600">

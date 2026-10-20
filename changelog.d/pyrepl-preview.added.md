@@ -1,0 +1,1 @@
+- Python syntax-tree previews for `mcpl--pyrepl--*` calls in the TUI, history replay, and Web UI. Shows session, ordered statements and block structure without executing or interpreting intent; raw web input remains expandable and preview omissions/errors are explicit.
