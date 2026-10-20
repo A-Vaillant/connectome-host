@@ -784,7 +784,7 @@ export async function runTui(app: AppContext): Promise<void> {
           const call = block as { name: string; input?: unknown };
           const preview = previewPyreplCall(call.name, call.input);
           toolNames.push(preview?.title ?? call.name);
-          if (preview) previews.push(preview);
+          if (preview && verboseChat) previews.push(preview);
         }
         // skip tool_result blocks
       }
@@ -1870,7 +1870,7 @@ export async function runTui(app: AppContext): Promise<void> {
 
       case 'inference:tool_calls_yielded': {
         const calls = event.calls as Array<{ name: string; input?: unknown }>;
-        const presentation = presentToolCallBatch(calls);
+        const presentation = presentToolCallBatch(calls, verboseChat);
         const names = presentation.label;
 
         if (agent) {
@@ -2383,7 +2383,7 @@ export async function runTui(app: AppContext): Promise<void> {
     }
     if (key.ctrl && key.name === 'v') {
       verboseChat = !verboseChat;
-      addLine(verboseChat ? '(verbose: on — showing agent thoughts & subagent results)' : '(verbose: off)', DIM_GRAY);
+      addLine(verboseChat ? '(verbose: on — showing agent thoughts, Python previews & subagent results)' : '(verbose: off)', DIM_GRAY);
       return;
     }
     // Ctrl+B: push to background — detach any blocking sync subagents and/or

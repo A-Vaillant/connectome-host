@@ -717,8 +717,10 @@ Commands that move the head (`/undo`, `/redo`, `/checkout`, `/restore`,
 
 ### Python tool-call previews
 
-Calls to `mcpl--pyrepl--exec` show the session and a compact Python syntax-tree
-projection in the terminal (including history replay) and the Web UI:
+Calls to `mcpl--pyrepl--exec` show a compact operation/session label in the
+terminal by default. Ctrl+V enables verbose details for subsequent calls;
+history replay also respects the verbose setting. The Web UI keeps its
+Python syntax-tree projection and expandable original input:
 
 ```text
 pyrepl exec · notes

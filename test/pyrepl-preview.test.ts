@@ -8,7 +8,7 @@ test('the actual yielded-call batch renders previews without an MCP lifecycle ev
     type: 'inference:tool_calls_yielded', agentName: 'sigilist',
     calls: [{ id: 'call-1', name: 'mcpl--pyrepl--exec', input: { session: 'audit', code: 'print(42)' } }],
   };
-  expect(presentToolCallBatch(event.calls)).toEqual({ label: 'pyrepl exec · audit', rows: ['  call print(42)'] });
+  expect(presentToolCallBatch(event.calls, true)).toEqual({ label: 'pyrepl exec · audit', rows: ['  call print(42)'] });
   // The framework emits this *other* shape later. It cannot identify the
   // owning UI agent or match a model-facing tool name; this was the bug.
   const started = { type: 'tool:started', module: 'mcpl:pyrepl', tool: 'exec', input: event.calls[0].input };
@@ -20,10 +20,17 @@ test('mixed tool batches keep generic tools and identify each Python preview', (
     { name: 'subagent--peek', input: {} },
     { name: 'mcpl--pyrepl--exec', input: { session: 'a', code: 'x = 1' } },
     { name: 'mcpl--pyrepl--exec', input: { session: 'b', code: 'print(2)' } },
-  ])).toEqual({
+  ], true)).toEqual({
     label: 'subagent--peek, pyrepl exec · a, pyrepl exec · b',
     rows: ['pyrepl exec · a', '  set x = 1', 'pyrepl exec · b', '  call print(2)'],
   });
+});
+
+test('terminal tool messages are compact by default; code rows require an explicit expansion', () => {
+  const calls = [{ name: 'mcpl--pyrepl--exec', input: { session: 'notes', code: 'x = 1\nprint(x)' } }];
+  expect(presentToolCallBatch(calls)).toEqual({ label: 'pyrepl exec · notes', rows: [] });
+  expect(presentToolCallBatch(calls, false).rows).toEqual([]);
+  expect(presentToolCallBatch(calls, true).rows).toEqual(['  set x = 1', '  call print(x)']);
 });
 
 test('renders imports, assignments, and actual call syntax without invented intent', () => {

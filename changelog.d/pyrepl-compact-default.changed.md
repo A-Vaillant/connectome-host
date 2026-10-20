@@ -1,0 +1,1 @@
+- Terminal pyrepl calls now show only a compact operation/session label by default, including history replay. Python syntax rows require verbose mode (Ctrl+V); the Web UI's syntax preview and expandable raw input are unchanged.
